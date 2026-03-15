@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CC-Daemon GUI</title>
+  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🤖 CC-Daemon Control Panel</h1>
+      <div class="header-actions">
+        <button id="select-mode-btn" class="btn btn-secondary">☑️ Select</button>
+        <button id="export-btn" class="btn btn-secondary">📤 Export</button>
+        <button id="settings-btn" class="btn btn-secondary">⚙️</button>
+        <button id="theme-toggle-btn" class="btn btn-secondary">🌙</button>
+        <button id="create-task-btn" class="btn btn-primary">+ Create Task</button>
+        <button id="refresh-btn" class="btn btn-secondary">🔄 Refresh</button>
+        <span id="last-update" class="last-update"></span>
+      </div>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab active" data-tab="tasks">📋 Tasks</button>
+      <button class="tab" data-tab="dashboard">📊 Dashboard</button>
+      <button class="tab" data-tab="sessions">🖥️ Sessions</button>
+      <button class="tab" data-tab="terminal">💻 Terminal</button>
+      <button class="tab" data-tab="context">📈 Context</button>
+    </nav>
+
+    <!-- Tasks Tab -->
+    <div id="tasks-tab" class="tab-content active">
+      <div class="section-header">
+        <h2>Task List</h2>
+        <div class="filters">
+          <input type="text" id="task-search" class="search-input" placeholder="🔍 Search tasks...">
+          <select id="tag-filter" class="filter-select">
+            <option value="">All Tags</option>
+          </select>
+          <select id="sort-select" class="filter-select">
+            <option value="created-desc">Newest First</option>
+            <option value="created-asc">Oldest First</option>
+            <option value="updated-desc">Recently Updated</option>
+            <option value="cost-desc">Highest Cost</option>
+            <option value="tokens-desc">Most Tokens</option>
+            <option value="status-asc">Status A-Z</option>
+          </select>
+          <select id="status-filter" class="filter-select">
+            <option value="active">Active</option>
+            <option value="pending">Pending</option>
+            <option value="all">All Tasks</option>
+            <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="failed">Failed</option>
+          </select>
+        </div>
+      </div>
+      <!-- Batch Action Bar -->
+      <div id="batch-action-bar" class="batch-action-bar" style="display: none;">
+        <span id="selected-count">0 selected</span>
+        <div class="batch-actions">
+          <button class="btn btn-small btn-warning" onclick="batchCancel()">Cancel Selected</button>
+          <button class="btn btn-small btn-danger" onclick="batchDelete()">Delete Selected</button>
+          <button class="btn btn-small btn-secondary" onclick="clearSelection()">Clear</button>
+        </div>
+      </div>
+      <div id="tasks-list" class="tasks-list">
+        <div class="loading">Loading tasks...</div>
+      </div>
+    </div>
+
+    <!-- Dashboard Tab -->
+    <div id="dashboard-tab" class="tab-content">
+      <div class="section-header">
+        <h2>Dashboard</h2>
+        <button id="refresh-dashboard-btn" class="btn btn-small btn-secondary">🔄</button>
+      </div>
+      <div id="dashboard-content">
+        <div class="loading">Loading dashboard...</div>
+      </div>
+    </div>
+
+    <!-- Sessions Tab -->
+    <div id="sessions-tab" class="tab-content">
+      <div class="section-header">
+        <h2>Tmux Sessions</h2>
+        <button id="refresh-sessions-btn" class="btn btn-small btn-secondary">🔄</button>
+      </div>
+      <div id="tmux-sessions" class="sessions-list">
+        <div class="loading">Loading sessions...</div>
+      </div>
+
+      <div class="section-header" style="margin-top: 2rem;">
+        <h2>🤖 CC-Daemon Work Sessions</h2>
+        <small class="section-subtitle">Sessions created by cc-daemon for task execution</small>
+      </div>
+      <div id="work-sessions" class="sessions-list">
+        <div class="loading">Loading work sessions...</div>
+      </div>
+
+      <div class="section-header" style="margin-top: 2rem;">
+        <h2>👤 Other Sessions</h2>
+        <small class="section-subtitle">User-created sessions, fix sessions, and verification sessions</small>
+      </div>
+      <div id="other-sessions" class="sessions-list">
+        <div class="loading">Loading other sessions...</div>
+      </div>
+    </div>
+
+    <!-- Terminal Tab -->
+    <div id="terminal-tab" class="tab-content">
+      <div class="section-header">
+        <h2>Embedded Terminal</h2>
+        <select id="terminal-session-select" class="filter-select">
+          <option value="">Select a session...</option>
+        </select>
+        <button id="terminal-connect-btn" class="btn btn-small btn-primary">Connect</button>
+        <button id="terminal-disconnect-btn" class="btn btn-small btn-secondary" disabled>Disconnect</button>
+      </div>
+      <div id="terminal-container" class="terminal-container">
+        <div id="terminal" class="terminal-view"></div>
+        <div id="terminal-placeholder" class="terminal-placeholder">
+          <p>Select a tmux session and click Connect to view the terminal output.</p>
+          <p class="terminal-hint">You can interact with the tmux session directly from this terminal.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Context Tab -->
+    <div id="context-tab" class="tab-content">
+      <div class="section-header">
+        <h2>Context Usage</h2>
+        <button id="refresh-context-btn" class="btn btn-small btn-secondary">🔄</button>
+      </div>
+      <div id="context-display" class="context-display">
+        <div class="loading">Loading context data...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Task Modal -->
+  <div id="create-task-modal" class="modal">
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h3>Create New Task</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="create-task-form">
+          <!-- Template Selection -->
+          <div class="form-group template-section">
+            <label for="template-select">Load from Template</label>
+            <div class="template-actions">
+              <select id="template-select" onchange="if(this.value) loadTemplate(this.value)">
+                <option value="">Select template...</option>
+              </select>
+              <button type="button" class="btn btn-small btn-secondary" onclick="saveCurrentTaskAsTemplate()" title="Save current form as template">💾 Save as Template</button>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="task-goal">Goal <span class="required">*</span></label>
+            <textarea id="task-goal" name="goal" rows="3" required placeholder="Describe what you want to accomplish..."></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="task-completion-promise">Completion Promise (optional)</label>
+            <textarea id="task-completion-promise" name="completionPromise" rows="2" placeholder="A condition that signals task completion, e.g., 'When all tests pass'"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="task-working-dir">Working Directory</label>
+            <input type="text" id="task-working-dir" name="workingDir" value="./workspace/" placeholder="./workspace/">
+            <small class="form-hint">Directory where the task will be executed (relative to cc-daemon start dir, or absolute path)</small>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="task-max-iterations">Max Iterations</label>
+              <input type="number" id="task-max-iterations" name="maxIterations" value="100" min="1" max="1000">
+            </div>
+            <div class="form-group">
+              <label for="task-threshold">Context Threshold (%)</label>
+              <input type="number" id="task-threshold" name="thresholdPercent" value="80" min="1" max="95">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="task-steps">Custom Steps (optional, one per line)</label>
+            <textarea id="task-steps" name="steps" rows="3" placeholder="Step 1: Analyze requirements&#10;Step 2: Implement solution&#10;Step 3: Test and verify"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label for="task-tags">Tags (optional, comma-separated)</label>
+            <input type="text" id="task-tags" name="tags" placeholder="api, frontend, bugfix">
+            <small class="form-hint">Add tags to categorize and filter tasks</small>
+          </div>
+
+          <div class="form-group">
+            <label for="task-depends-on">Dependencies (optional)</label>
+            <select id="task-depends-on" name="dependsOn" multiple class="multi-select">
+              <option value="">No dependencies</option>
+            </select>
+            <small class="form-hint">This task will only start after all selected tasks are completed</small>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="task-tmux" name="tmux" checked>
+              <span>Use Tmux Session</span>
+            </label>
+            <small class="form-hint">Run task in a tmux session for better process management</small>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="task-ralph-loop" name="ralphLoop">
+              <span>Enable Ralph Loop Mode</span>
+            </label>
+            <small class="form-hint">Automatically inject /ralph-loop:ralph-loop skill for better session continuity (recommended for long-running tasks)</small>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="task-enable-verification" name="enableVerification">
+              <span>Enable Verification</span>
+            </label>
+            <small class="form-hint">Run a clean verification session after task completion to confirm it meets acceptance criteria</small>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="task-enable-auto-trigger" name="enableAutoTrigger">
+              <span>Enable Auto-Trigger Monitor</span>
+            </label>
+            <small class="form-hint">Automatically send "continue" when Claude is waiting for input (e.g., at ❯ prompt)</small>
+          </div>
+
+          <div class="form-actions">
+            <button type="button" class="btn btn-secondary" onclick="closeCreateTaskModal()">Cancel</button>
+            <button type="submit" class="btn btn-primary">Create Task</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Task Detail Modal -->
+  <div id="task-modal" class="modal">
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h3 id="modal-title">Task Details</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <!-- Detail Tabs -->
+      <div class="detail-tabs">
+        <button class="detail-tab active" data-detail-tab="overview">Overview</button>
+        <button class="detail-tab" data-detail-tab="logs">Logs</button>
+      </div>
+      <div class="modal-body" id="modal-body">
+        <!-- Dynamic content -->
+      </div>
+      <div class="modal-footer" id="modal-footer">
+        <!-- Dynamic action buttons -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Modal -->
+  <div id="confirm-modal" class="modal">
+    <div class="modal-content modal-small">
+      <div class="modal-header">
+        <h3 id="confirm-title">Confirm Action</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-message"></p>
+        <div id="confirm-input-container" class="form-group" style="display: none;">
+          <label for="confirm-input" id="confirm-input-label"></label>
+          <input type="text" id="confirm-input">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="confirm-cancel">Cancel</button>
+        <button class="btn btn-danger" id="confirm-ok">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- Help Modal -->
+  <div id="help-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>⌨️ Keyboard Shortcuts</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="shortcuts-grid">
+          <div class="shortcut-item">
+            <kbd>N</kbd>
+            <span>Create new task</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>R</kbd>
+            <span>Refresh data</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>F</kbd>
+            <span>Toggle filter menu</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>?</kbd>
+            <span>Show this help</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>Esc</kbd>
+            <span>Close modal/dialog</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>D</kbd>
+            <span>Toggle dark/light mode</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>E</kbd>
+            <span>Export task list</span>
+          </div>
+          <div class="shortcut-item">
+            <kbd>S</kbd>
+            <span>Toggle select mode</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" onclick="closeHelpModal()">Got it!</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Modal -->
+  <div id="export-modal" class="modal">
+    <div class="modal-content modal-small">
+      <div class="modal-header">
+        <h3>📤 Export Data</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="export-format">Format</label>
+          <select id="export-format">
+            <option value="json">JSON</option>
+            <option value="csv">CSV</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="export-scope">Scope</label>
+          <select id="export-scope">
+            <option value="all">All Tasks</option>
+            <option value="filtered">Filtered Tasks</option>
+            <option value="selected">Selected Tasks</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeExportModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="exportData()">Export</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Session Output Modal -->
+  <div id="session-output-modal" class="modal">
+    <div class="modal-content modal-large">
+      <div class="modal-header">
+        <h3 id="session-output-title">Session Output</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <pre id="session-output-content" class="session-output-pre">Loading...</pre>
+      </div>
+      <div id="session-input-div" class="session-input-container">
+        <input type="text" id="session-input" class="session-input" placeholder="Type a command... (Enter to send)">
+        <button id="session-send-btn" class="btn btn-primary">Send</button>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeSessionOutputModal()">Close</button>
+        <button class="btn btn-primary" onclick="refreshSessionOutput()">🔄 Refresh</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>⚙️ Settings</h3>
+        <button class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="settings-form">
+          <div class="form-group">
+            <label for="setting-refresh-interval">Refresh Interval (seconds)</label>
+            <input type="number" id="setting-refresh-interval" value="10" min="1" max="60">
+            <small class="form-hint">How often to refresh data (1-60 seconds)</small>
+          </div>
+
+          <div class="form-group">
+            <label for="setting-context-warning">Context Warning Threshold (%)</label>
+            <input type="number" id="setting-context-warning" value="75" min="50" max="95">
+            <small class="form-hint">Show warning when context exceeds this percentage</small>
+          </div>
+
+          <div class="form-group">
+            <label for="setting-context-danger">Context Danger Threshold (%)</label>
+            <input type="number" id="setting-context-danger" value="90" min="70" max="99">
+            <small class="form-hint">Show danger alert when context exceeds this percentage</small>
+          </div>
+
+          <hr style="margin: 1.5rem 0; border-color: var(--border-color);">
+
+          <h4 style="margin-bottom: 1rem; color: var(--primary-color);">Default Task Settings</h4>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="setting-max-iterations">Max Iterations</label>
+              <input type="number" id="setting-max-iterations" value="100" min="1" max="1000">
+            </div>
+            <div class="form-group">
+              <label for="setting-threshold">Context Threshold (%)</label>
+              <input type="number" id="setting-threshold" value="80" min="1" max="95">
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="setting-work-dir">Default Working Directory</label>
+            <input type="text" id="setting-work-dir" value="./test_work_dir" placeholder="./test_work_dir">
+            <small class="form-hint">Default directory for creating new tasks</small>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="setting-use-tmux" checked>
+              <span>Use Tmux by default</span>
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="setting-ralph-loop">
+              <span>Enable Ralph Loop by default</span>
+            </label>
+          </div>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="setting-notifications" checked>
+              <span>Enable browser notifications</span>
+            </label>
+          </div>
+
+          <hr style="margin: 1.5rem 0; border-color: var(--border-color);">
+
+          <h4 style="margin-bottom: 1rem; color: var(--primary-color);">Auto-Trigger Monitor</h4>
+
+          <div class="form-group">
+            <label class="checkbox-label">
+              <input type="checkbox" id="setting-auto-trigger">
+              <span>Enable Auto-Trigger Monitor</span>
+            </label>
+            <small class="form-hint">Automatically send continue prompts when Claude is waiting for input</small>
+          </div>
+
+          <div class="form-group">
+            <label for="setting-auto-trigger-interval">Poll Interval (seconds)</label>
+            <input type="number" id="setting-auto-trigger-interval" value="60" min="10" max="600">
+            <small class="form-hint">How often to check for sessions needing auto-trigger</small>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeSettingsModal()">Cancel</button>
+        <button class="btn btn-warning" onclick="resetSettings()">Reset to Defaults</button>
+        <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.js"></script>
+  <script src="/terminal.js"></script>
+  <script src="/app.js"></script>
+</body>
+</html>

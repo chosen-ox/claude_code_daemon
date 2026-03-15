@@ -1,0 +1,34 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+gui.log
+
+# Environment
+.env
+.env.local
+
+# Local tool config
+.claude/
+.playwright-mcp/
+
+# Manual test workspace
+workspace/
+
+# Backups
+*.bak
